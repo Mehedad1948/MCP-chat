@@ -1,0 +1,22 @@
+[
+  {
+    "question": "How do I reset my password?",
+    "answer": "To reset your password, go to the Account Settings page and click on 'Forgot Password'."
+  },
+  {
+    "question": "What is your refund policy?",
+    "answer": "We offer refunds within 30 days of purchase. Contact support with your order ID."
+  },
+  {
+    "question": "Do you provide phone support?",
+    "answer": "Yes, phone support is available Monday to Friday, 10 AM to 6 PM IST."
+  },
+  {
+    "question": "How can I update my email address?",
+    "answer": "You can update your email from your Profile Settings page under Email Preferences."
+  },
+  {
+    "question": "Is my data secure?",
+    "answer": "Yes. All user data is encrypted and protected using industry best security practices."
+  }
+]

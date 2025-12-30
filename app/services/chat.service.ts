@@ -1,27 +1,32 @@
 // app/actions.ts
-'use server'
+'use server';
+
+import RagProvider from '../lib/rag';
 
 export async function sendMessageToLLM(message: string): Promise<string> {
   // 1. Retrieve Environment Variables
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash"; // Default or from env
+  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash'; // Default or from env
 
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not defined in environment variables");
+    throw new Error('GEMINI_API_KEY is not defined in environment variables');
   }
 
   // 2. Construct the Gemini Endpoint
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
+  const rag = new RagProvider();
+  const prompt = rag.prepareSimpleRagPrompt(message);
+  console.log('🐞🐞', prompt);
+  console.log('🎄🎄', rag.prepareRagPrompt(message));
+
   // 3. Prepare the Request Body (Gemini Format)
   const body = {
     contents: [
       {
-        parts: [
-          { text: message }
-        ]
-      }
-    ]
+        parts: [{ text: prompt }],
+      },
+    ],
   };
 
   try {
@@ -36,7 +41,7 @@ export async function sendMessageToLLM(message: string): Promise<string> {
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error("Gemini API Error:", errorData);
+      console.error('Gemini API Error:', errorData);
       throw new Error(`Gemini API Error: ${response.statusText}`);
     }
 
@@ -48,14 +53,13 @@ export async function sendMessageToLLM(message: string): Promise<string> {
     const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!reply) {
-      throw new Error("No response text found in Gemini output");
+      throw new Error('No response text found in Gemini output');
     }
 
     return reply;
-
   } catch (error) {
     console.error('Server Action Error:', error);
     // Re-throw or return a generic error message depending on your UI needs
-    throw new Error("Failed to communicate with AI");
+    throw new Error('Failed to communicate with AI');
   }
 }
