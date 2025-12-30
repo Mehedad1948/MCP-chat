@@ -18,7 +18,7 @@ export async function sendMessageToLLM(message: string): Promise<string> {
   const rag = new RagProvider();
   const prompt = rag.prepareSimpleRagPrompt(message);
   console.log('🐞🐞', prompt);
-  console.log('🎄🎄', rag.prepareRagPrompt(message));
+  // console.log('🎄🎄', rag.prepareRagPrompt(message));
 
   // 3. Prepare the Request Body (Gemini Format)
   const body = {
