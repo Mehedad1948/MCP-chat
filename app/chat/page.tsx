@@ -1,27 +1,28 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// chat/page.tsx
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Message } from '@/interfaces/message';
-import { sendMessageToLLM } from '../services/chat.service';
-import { MessageCircleQuestionMark } from 'lucide';
+import { chatAction } from '../actions/chat.actions'; // Updated Import: Using Server Action
 import { MessageCircleDashed } from 'lucide-react';
 
 export default function ChatInterface() {
-    // --- State Management (Replaces Angular Signals) ---
+    // --- State Management ---
     const [history, setHistory] = useState<Message[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [message, setMessage] = useState('');
 
-    // --- Refs (Replaces viewChild) ---
+    // --- Refs ---
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
-    // --- Effects (Replaces Angular Effect for scrolling) ---
+    // --- Effects ---
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
-    }, [history]); // Dependency array: runs whenever 'history' changes
+    }, [history]);
 
     // --- Handlers ---
     const handleSendMessage = async (e?: React.FormEvent) => {
@@ -48,21 +49,28 @@ export default function ChatInterface() {
             setLoading(true);
             setError(null);
 
-            // Simulate API call or use real service
-            const botReply = await sendMessageToLLM(msg.message);
+            // Updated Logic: Call the Server Action
+            // We pass 'gemini' as the default model, similar to your controller logic
+            const response = await chatAction(msg.message, 'gemini');
 
-            // Mock response if service fails or for testing
-            // const botReply = "I am a converted Next.js bot response.";
+            if (response.error) {
+                setError(response.error);
+                return;
+            }
+
+            const botReply = response.reply || "No response received from AI.";
 
             const newBotMessage: Message = {
                 id: Date.now(),
                 sender: 'bot',
                 message: botReply,
+                modelName: 'Gemini' 
             };
 
             setHistory((prev) => [...prev, newBotMessage]);
         } catch (err: any) {
-            setError(err?.message || 'Something went wrong');
+            console.error("Client Error:", err);
+            setError(err?.message || 'Something went wrong communicating with the server.');
         } finally {
             setLoading(false);
         }
@@ -74,7 +82,6 @@ export default function ChatInterface() {
 
                 {/* --- Header --- */}
                 <header className="flex items-center p-4 gap-4 border-b border-gray-700">
-                    {/* Replaced 'bi bi-chat-dots-fill' with an SVG for immediate compatibility */}
                     <MessageCircleDashed />
                     <div>
                         <h1 className="text-xl md:text-2xl font-bold text-white">Technyks AI Chat</h1>
