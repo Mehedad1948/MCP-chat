@@ -42,7 +42,6 @@ export async function sendMessageToLLM(message: string) {
       vector: faqEmbeddings[index],
     }));
 
-    console.log('🍎🍎🍎 faqVectors', faqVectors);
 
     const prompt = rag.prepareRagPrompt(message, queryVector, faqVectors);
 
