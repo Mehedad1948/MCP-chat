@@ -44,7 +44,7 @@ class RagProvider {
 
     const context = ranked.map((item) => item.answer).join("\n");
 
-    console.log('🎮🎮 retrived Contenxt', context);
+    console.log('🎮🎮 retrived Contenxt', ranked);
 
 
     const prompt = `
