@@ -4,7 +4,7 @@ import cosineSimilarity from "compute-cosine-similarity";
 
 class RagProvider {
   fetchDocumentData(fileName) {
-    const filePath = path.join(process.cwd(),'app' ,"data", fileName);
+    const filePath = path.join(process.cwd(), 'app', "data", fileName);
     const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
     return data;
   }
@@ -43,6 +43,9 @@ class RagProvider {
     // console.log("Top RAG matches:", ranked);
 
     const context = ranked.map((item) => item.answer).join("\n");
+
+    console.log('🎮🎮 retrived Contenxt', context);
+
 
     const prompt = `
       Use the context below to answer. If the answer isn't there, say "It's not available in the documentation, but I will try to help you as best as I can." and try to help based on your general knowledge.

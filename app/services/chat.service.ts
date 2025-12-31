@@ -1,9 +1,11 @@
 // app/actions.ts
 'use server';
 
-import RagProvider from '../lib/rag';
 
-export async function sendMessageToLLM(message: string): Promise<string> {
+import RagProvider from '../lib/rag';
+import GeminiProvider from '../lib/geminiProvider';
+
+export async function sendMessageToLLM(message: string) {
   // 1. Retrieve Environment Variables
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash'; // Default or from env
@@ -12,54 +14,44 @@ export async function sendMessageToLLM(message: string): Promise<string> {
     throw new Error('GEMINI_API_KEY is not defined in environment variables');
   }
 
-  // 2. Construct the Gemini Endpoint
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const rag = new RagProvider();
-  const prompt = rag.prepareSimpleRagPrompt(message);
-  console.log('🐞🐞', prompt);
-  // console.log('🎄🎄', rag.prepareRagPrompt(message));
-
-  // 3. Prepare the Request Body (Gemini Format)
-  const body = {
-    contents: [
-      {
-        parts: [{ text: prompt }],
-      },
-    ],
-  };
-
   try {
-    // 4. Perform the Server-to-Server Fetch
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    const gemini = new GeminiProvider(
+      process.env.GEMINI_API_KEY,
+      process.env.GEMINI_MODEL
+    );
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Gemini API Error:', errorData);
-      throw new Error(`Gemini API Error: ${response.statusText}`);
-    }
+    // const response = await gemini.generateResponse(message);
 
-    // 5. Parse the Response
-    const data = await response.json();
+    // Incorporate RAG to prepare the prompt
+    const rag = new RagProvider();
+    // const prompt = rag.prepareSimpleRagPrompt(message);
 
-    // 6. Extract the text safely
-    // Structure: data.candidates[0].content.parts[0].text
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    // For RAG with embeddings, we would first need to generate the query embedding
+    const queryEmbedding = await gemini.generateEmbeddings(message);
+    const queryVector = queryEmbedding[0];
 
-    if (!reply) {
-      throw new Error('No response text found in Gemini output');
-    }
+    // Fetch FAQ vectors from faqs.json
+    const faqData: {question: string, answer: string}[] = rag.fetchDocumentData("faqs.json");
+    const faqEmbeddings = await gemini.generateEmbeddings(
+      faqData.map((item) => item.answer),
+      "RETRIEVAL_DOCUMENT"
+    );
+    
+    const faqVectors = faqData.map((faq, index) => ({
+      ...faq,
+      vector: faqEmbeddings[index],
+    }));
 
-    return reply;
+    console.log('🍎🍎🍎 faqVectors', faqVectors);
+
+    const prompt = rag.prepareRagPrompt(message, queryVector, faqVectors);
+
+    const response = await gemini.generateResponse(prompt);
+    // console.log(`Generated response: ${response}`);
+
+    return response
   } catch (error) {
-    console.error('Server Action Error:', error);
-    // Re-throw or return a generic error message depending on your UI needs
-    throw new Error('Failed to communicate with AI');
+    console.error("Error generating response from Gemini:", error);
+  return `Error generating response from Gemini ➡️:${JSON.stringify(error)}`
   }
 }
