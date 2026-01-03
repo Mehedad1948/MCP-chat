@@ -1,20 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 import { NextRequest, NextResponse } from "next/server";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createMcpServer } from "@/app/lib/mcp/server/mcpServer"; // Check this path matches your project
+import { createMcpServer } from "@/app/lib/mcp/server/mcpServer"; // Ensure path matches
 import { randomUUID } from "node:crypto";
 
-// 1. Initialize Server Instance
 const mcpServer = createMcpServer();
-
 const USE_SESSIONS = true;
 
-// Global map to store active sessions (In-memory)
-// Note: This works for long-running servers. In Vercel serverless, this may reset.
+// In-memory store for sessions
 const sessionsTransports: Record<string, StreamableHTTPServerTransport> = {};
 
-// --- HELPER FUNCTIONS (From your pattern) ---
+// --- HELPERS ---
 
 function getSessionTransport(sessionId?: string) {
   if (!USE_SESSIONS) return null;
@@ -42,27 +38,15 @@ function createTransport() {
   return transport;
 }
 
-// --- NODE.JS ADAPTERS (Critical for Next.js App Router) ---
+// --- ADAPTERS ---
 
-/**
- * Adapter for POST requests (Command/Response)
- * Waits for the transport to write the full response, then returns NextResponse.
- */
-async function handlePostAdapter(req: NextRequest, transport: StreamableHTTPServerTransport, body: any) {
-  return new Promise<NextResponse>((resolve) => {
-    // Mock Node.js Request
-    const mockReq = {
-      method: req.method,
-      url: req.url,
-      headers: Object.fromEntries(req.headers.entries()),
-      body: body,
-    };
-
+async function handlePostAdapter(req: NextRequest, transport: StreamableHTTPServerTransport, parsedBody: any) {
+  return new Promise<NextResponse>(async (resolve) => {
     let responseData = "";
     let statusCode = 200;
     const responseHeaders: Record<string, string> = { "Content-Type": "application/json" };
 
-    // Mock Node.js Response
+    // 1. MOCK RESPONSE
     const mockRes = {
       setHeader: (key: string, value: string) => { responseHeaders[key] = value; },
       writeHead: (code: number, headers?: any) => {
@@ -72,22 +56,40 @@ async function handlePostAdapter(req: NextRequest, transport: StreamableHTTPServ
       write: (chunk: any) => { responseData += chunk; return true; },
       end: (chunk: any) => {
         if (chunk) responseData += chunk;
+        // Resolve the Promise to send response back to Next.js
         resolve(new NextResponse(responseData, { status: statusCode, headers: responseHeaders }));
       },
     };
 
-    // @ts-ignore Call SDK
-    transport.handleRequest(mockReq, mockRes, body).catch((err) => {
-      console.error("MCP Transport Error:", err);
-      resolve(NextResponse.json({ error: "Internal Transport Error" }, { status: 500 }));
-    });
+    // 2. MOCK REQUEST
+    // We explicitly set `body` so the SDK doesn't try to read the stream.
+    // We also add empty stream methods to prevent crashes if the SDK tries to listen.
+    const mockReq = {
+      method: req.method,
+      url: req.url,
+      headers: Object.fromEntries(req.headers.entries()),
+      body: parsedBody, // Express-style body injection
+      
+      // Dummy stream methods to satisfy generic IncomingMessage checks
+      on: (event: string, callback: any) => {
+        // If SDK tries to read data, trigger end immediately since we provided body
+        if (event === 'end') callback(); 
+        return mockReq;
+      },
+      removeListener: () => mockReq,
+    };
+
+    try {
+      // 3. EXECUTE
+      // We pass parsedBody as 3rd arg just in case, but mockReq.body is the standard Express way
+      await transport.handleRequest(mockReq as any, mockRes as any, parsedBody);
+    } catch (error) {
+      console.error("MCP Handle Request Error:", error);
+      resolve(NextResponse.json({ error: "Internal Server Error" }, { status: 500 }));
+    }
   });
 }
 
-/**
- * Adapter for GET requests (SSE Stream)
- * Pipes the transport writes directly to a ReadableStream.
- */
 function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTransport) {
   const stream = new ReadableStream({
     start(controller) {
@@ -98,7 +100,7 @@ function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTrans
       };
 
       const mockRes = {
-        setHeader: () => {}, 
+        setHeader: () => {},
         writeHead: () => {},
         write: (chunk: any) => {
           controller.enqueue(new TextEncoder().encode(chunk));
@@ -109,8 +111,10 @@ function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTrans
         },
       };
 
-      // @ts-ignore Call SDK
-      transport.handleRequest(mockReq, mockRes).catch((err) => controller.error(err));
+      transport.handleRequest(mockReq as any, mockRes as any).catch((err) => {
+        console.error("MCP Stream Error:", err);
+        controller.error(err);
+      });
     },
   });
 
@@ -123,21 +127,26 @@ function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTrans
   });
 }
 
-// --- ROUTE HANDLERS (Next.js Entry Points) ---
+// --- ROUTE HANDLERS ---
 
 export async function POST(req: NextRequest) {
   const sessionId = req.headers.get("mcp-session-id") || undefined;
   
-  console.log('🚀🚀🚀 sessionId in mcp post');
+  console.log('❤️❤️❤️ sessionId', sessionId);
   
-  // 1. Parse Body
   let body: any = {};
-  try { body = await req.json(); } catch (e) { /* empty */ }
+  try {
+    const text = await req.text();
+    // Only parse if there is content
+    if (text) body = JSON.parse(text);
+  } catch (e) {
+    console.error("Failed to parse body:", e);
+  }
 
   let transport = getSessionTransport(sessionId);
 
+  // Initialize Logic
   if (USE_SESSIONS) {
-    // Check if this is an "initialize" request (manually check method if import unavailable)
     const isInitialize = body?.method === "initialize";
 
     if (!transport && isInitialize) {
@@ -153,12 +162,11 @@ export async function POST(req: NextRequest) {
       );
     }
   } else {
-    // Stateless Mode
+    // Stateless fallback
     transport = createTransport();
     await mcpServer.connect(transport);
   }
 
-  // 2. Delegate to Adapter
   return await handlePostAdapter(req, transport, body);
 }
 
@@ -174,6 +182,5 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Invalid or missing session ID", { status: 400 });
   }
 
-  // 2. Delegate to Adapter
   return handleGetAdapter(req, transport);
 }
