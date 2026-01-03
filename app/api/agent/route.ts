@@ -1,67 +1,27 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Client } from '@modelcontextprotocol/sdk/client'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { NextResponse } from 'next/server';
+import { generateAgentResponse } from '@/app/services/agent.service';
 
-class MCPClientService {
-    private static instance: MCPClientService
-    client: Client
-    private tools: any[] = []
-    private initialised = false;
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { message, model } = body;
 
-    constructor(){
-        this.client = new Client({
-            name: 'node-mcp-client',
-            version: '1.0.0'
-        })
-    }
+    // Call the shared service
+    const reply = await generateAgentResponse(message, model);
 
-    static getInstance(): MCPClientService {
-        if (!MCPClientService.instance) {
-            MCPClientService.instance = new MCPClientService()
-        }
-        return MCPClientService.instance
-    }
+    return NextResponse.json({ reply });
 
-    async init(){
-        if (this.initialised) return this
+  } catch (error: any) {
+    console.error('Error generating response:', error);
+    
+    const status = error.message === 'Message is required' || error.message === 'Invalid model specified' 
+      ? 400 
+      : 500;
 
-        // FIX: Ensure we use 127.0.0.1 for local dev to avoid IPv6 issues
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://127.0.0.1:3000';
-        const url = `${baseUrl}/api/mcp`
-        
-        console.log(`Connecting MCP Client to: ${url}`); // Debug log
-
-        const transport = new StreamableHTTPClientTransport(new URL(url))
-
-        try {
-            await this.client.connect(transport)
-            this.initialised = true
-        } catch (error) {
-            console.error("Failed to connect MCP Client:", error);
-            throw error;
-        }
-        
-        return this
-    }
-
-    async getTools(){
-        await this.init()
-
-        if (this.tools.length === 0) {
-            const list = await this.client.listTools()
-            this.tools = list.tools
-        }
-        return this.tools
-    }
-
-   async callTool(name: string, args: Record<string, any>){
-        if (!this.initialised) await this.init()
-
-            return await this.client.callTool({
-                name,
-                arguments: args
-            })
-    }
+    return NextResponse.json(
+      { error: error.message || 'Failed to get a response from the AI.' },
+      { status }
+    );
+  }
 }
-
-export const MCPClient = MCPClientService.getInstance()
