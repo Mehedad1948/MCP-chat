@@ -13,25 +13,37 @@ const sessionsTransports: Record<string, StreamableHTTPServerTransport> = {};
 // --- HELPERS ---
 
 function getSessionTransport(sessionId?: string) {
+  console.log(`[MCP Helper] Lookup session: ${sessionId}`);
   if (!USE_SESSIONS) return null;
-  return sessionId ? sessionsTransports[sessionId] : null;
+  const transport = sessionId ? sessionsTransports[sessionId] : null;
+  console.log(`[MCP Helper] Found transport? ${!!transport}`);
+  return transport;
 }
 
 function createTransport() {
+  console.log("[MCP Helper] Creating new transport...");
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: USE_SESSIONS ? () => randomUUID() : undefined,
+    sessionIdGenerator: USE_SESSIONS ? () => {
+      const id = randomUUID();
+      console.log(`[MCP Helper] Generated new Session ID: ${id}`);
+      return id;
+    } : undefined,
     enableJsonResponse: true,
     onsessioninitialized: (sessionId) => {
+      console.log(`[MCP Helper] Session initialized callback triggered for: ${sessionId}`);
       if (USE_SESSIONS) {
         sessionsTransports[sessionId] = transport;
+        console.log(`[MCP Helper] Transport stored in memory. Total sessions: ${Object.keys(sessionsTransports).length}`);
       }
     },
   });
 
   if (USE_SESSIONS) {
     transport.onclose = () => {
+      console.log(`[MCP Helper] Transport closed event. SessionId: ${transport.sessionId}`);
       if (transport.sessionId) {
         delete sessionsTransports[transport.sessionId];
+        console.log(`[MCP Helper] Session removed from memory.`);
       }
     };
   }
@@ -41,6 +53,8 @@ function createTransport() {
 // --- ADAPTERS ---
 
 async function handlePostAdapter(req: NextRequest, transport: StreamableHTTPServerTransport, parsedBody: any) {
+  console.log("[MCP Adapter] Starting handlePostAdapter...");
+  
   return new Promise<NextResponse>(async (resolve) => {
     let responseData = "";
     let statusCode = 200;
@@ -48,51 +62,74 @@ async function handlePostAdapter(req: NextRequest, transport: StreamableHTTPServ
 
     // 1. MOCK RESPONSE
     const mockRes = {
-      setHeader: (key: string, value: string) => { responseHeaders[key] = value; },
+      setHeader: (key: string, value: string) => { 
+        // console.log(`[MCP Adapter] MockRes setHeader: ${key}=${value}`);
+        responseHeaders[key] = value; 
+      },
       writeHead: (code: number, headers?: any) => {
+        console.log(`[MCP Adapter] MockRes writeHead: ${code}`);
         statusCode = code;
         if (headers) Object.assign(responseHeaders, headers);
       },
-      write: (chunk: any) => { responseData += chunk; return true; },
+      write: (chunk: any) => { 
+        // console.log(`[MCP Adapter] MockRes write chunk length: ${chunk?.length}`);
+        responseData += chunk; 
+        return true; 
+      },
       end: (chunk: any) => {
+        console.log(`[MCP Adapter] MockRes END called. Total data length: ${responseData.length}`);
         if (chunk) responseData += chunk;
+        
         // Resolve the Promise to send response back to Next.js
+        console.log("[MCP Adapter] Resolving POST promise...");
         resolve(new NextResponse(responseData, { status: statusCode, headers: responseHeaders }));
       },
     };
 
     // 2. MOCK REQUEST
-    // We explicitly set `body` so the SDK doesn't try to read the stream.
-    // We also add empty stream methods to prevent crashes if the SDK tries to listen.
     const mockReq = {
       method: req.method,
       url: req.url,
       headers: Object.fromEntries(req.headers.entries()),
-      body: parsedBody, // Express-style body injection
+      body: parsedBody, 
       
-      // Dummy stream methods to satisfy generic IncomingMessage checks
       on: (event: string, callback: any) => {
+        console.log(`[MCP Adapter] SDK added listener for event: '${event}'`);
         // If SDK tries to read data, trigger end immediately since we provided body
-        if (event === 'end') callback(); 
+        if (event === 'end') {
+            console.log("[MCP Adapter] Triggering immediate 'end' callback for SDK");
+            callback(); 
+        }
         return mockReq;
       },
-      removeListener: () => mockReq,
+      removeListener: (event: string) => {
+        // console.log(`[MCP Adapter] SDK removed listener for event: '${event}'`);
+        return mockReq;
+      },
     };
 
     try {
       // 3. EXECUTE
-      // We pass parsedBody as 3rd arg just in case, but mockReq.body is the standard Express way
+      console.log("[MCP Adapter] Calling transport.handleRequest()...");
+      console.log(`[MCP Adapter] Payload Method: ${parsedBody?.method}`);
+      
       await transport.handleRequest(mockReq as any, mockRes as any, parsedBody);
+      
+      console.log("[MCP Adapter] transport.handleRequest() returned/completed.");
+      // Note: We do NOT resolve here immediately. We wait for mockRes.end() to be called by the SDK.
+      
     } catch (error) {
-      console.error("MCP Handle Request Error:", error);
+      console.error("[MCP Adapter] CRITICAL ERROR in handleRequest:", error);
       resolve(NextResponse.json({ error: "Internal Server Error" }, { status: 500 }));
     }
   });
 }
 
 function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTransport) {
+  console.log("[MCP GET Adapter] Starting stream setup...");
   const stream = new ReadableStream({
     start(controller) {
+      console.log("[MCP GET Adapter] Stream started.");
       const mockReq = {
         method: req.method,
         url: req.url,
@@ -103,16 +140,18 @@ function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTrans
         setHeader: () => {},
         writeHead: () => {},
         write: (chunk: any) => {
+          console.log(`[MCP GET Adapter] Streaming chunk: ${chunk.length} bytes`);
           controller.enqueue(new TextEncoder().encode(chunk));
           return true;
         },
         end: () => {
+          console.log("[MCP GET Adapter] Stream ended by SDK.");
           controller.close();
         },
       };
 
       transport.handleRequest(mockReq as any, mockRes as any).catch((err) => {
-        console.error("MCP Stream Error:", err);
+        console.error("[MCP GET Adapter] Stream Error:", err);
         controller.error(err);
       });
     },
@@ -130,17 +169,23 @@ function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTrans
 // --- ROUTE HANDLERS ---
 
 export async function POST(req: NextRequest) {
-  const sessionId = req.headers.get("mcp-session-id") || undefined;
+  console.log('--------------------------------------------------');
+  console.log('❤️❤️❤️ [POST] Incoming Request');
   
-  console.log('❤️❤️❤️ sessionId', sessionId);
+  const sessionId = req.headers.get("mcp-session-id") || undefined;
+  console.log(`❤️❤️❤️ [POST] Session ID Header: ${sessionId}`);
   
   let body: any = {};
   try {
     const text = await req.text();
-    // Only parse if there is content
-    if (text) body = JSON.parse(text);
+    console.log(`❤️❤️❤️ [POST] Raw Body Length: ${text.length}`);
+    if (text) {
+        body = JSON.parse(text);
+        console.log(`❤️❤️❤️ [POST] Parsed JSON Method: ${body.method}`);
+        // console.log(`❤️❤️❤️ [POST] Body content:`, JSON.stringify(body, null, 2));
+    }
   } catch (e) {
-    console.error("Failed to parse body:", e);
+    console.error("❤️❤️❤️ [POST] Failed to parse body:", e);
   }
 
   let transport = getSessionTransport(sessionId);
@@ -148,14 +193,19 @@ export async function POST(req: NextRequest) {
   // Initialize Logic
   if (USE_SESSIONS) {
     const isInitialize = body?.method === "initialize";
+    console.log(`❤️❤️❤️ [POST] Is Initialize Request? ${isInitialize}`);
 
     if (!transport && isInitialize) {
-      console.log("Initializing MCP session...");
+      console.log("❤️❤️❤️ [POST] No active transport found, initializing new session...");
       transport = createTransport();
+      
+      console.log("❤️❤️❤️ [POST] Connecting MCP Server to transport...");
       await mcpServer.connect(transport);
+      console.log("❤️❤️❤️ [POST] MCP Server Connected.");
     }
 
     if (!transport) {
+      console.warn("❤️❤️❤️ [POST] ERROR: No valid session provided and not an initialize request.");
       return NextResponse.json(
         { error: { message: "No valid session provided" }, id: null },
         { status: 400 }
@@ -163,24 +213,34 @@ export async function POST(req: NextRequest) {
     }
   } else {
     // Stateless fallback
+    console.log("❤️❤️❤️ [POST] Stateless mode active");
     transport = createTransport();
     await mcpServer.connect(transport);
   }
 
+  console.log("❤️❤️❤️ [POST] Passing control to Adapter...");
   return await handlePostAdapter(req, transport, body);
 }
 
 export async function GET(req: NextRequest) {
+  console.log('--------------------------------------------------');
+  console.log('🔵🔵🔵 [GET] Incoming Request');
+
   if (!USE_SESSIONS) {
+    console.warn("🔵🔵🔵 [GET] Failed: GET not supported in stateless mode");
     return new NextResponse("GET not supported in stateless mode", { status: 400 });
   }
 
   const sessionId = req.headers.get("mcp-session-id") || undefined;
+  console.log(`🔵🔵🔵 [GET] Session ID Header: ${sessionId}`);
+
   const transport = getSessionTransport(sessionId);
 
   if (!transport) {
+    console.warn("🔵🔵🔵 [GET] Failed: Invalid or missing session ID");
     return new NextResponse("Invalid or missing session ID", { status: 400 });
   }
 
+  console.log("🔵🔵🔵 [GET] Passing control to Adapter...");
   return handleGetAdapter(req, transport);
 }
