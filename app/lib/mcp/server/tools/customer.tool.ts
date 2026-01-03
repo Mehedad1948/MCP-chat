@@ -1,63 +1,41 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// app/tools/customer.tool.ts
 import { CustomerService } from '@/app/services/customer.service';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import z from 'zod';
+import { z } from 'zod';
 
-export function registerCustomerTools(mcpServer: McpServer) {
+// We accept 'any' here because mcp-handler types are inferred inside the createMcpHandler callback,
+// or you can define a minimal interface if you want strict typing.
+export function registerCustomerTools(server: any) {
   console.log('Registering Customer Tools...');
 
-  mcpServer.registerTool(
+  server.tool(
     'getCustomers',
-    {
-      title: 'Fetch All customers',
-      description: 'Retrieve all customers from the json data by limit',
-      inputSchema: { limit: z.number().optional() },
-      outputSchema: {
-        customers: z.array(
-          z.object({
-            _id: z.string(),
-            name: z.string(),
-            email: z.string(),
-            joinedAt: z.string().optional(),
-          })
-        ),
-      },
+    'Fetch All customers. Retrieve all customers from the json data by limit',
+    { 
+      limit: z.number().optional() 
     },
-    async ({ limit }) => {
+    async ({ limit }: { limit?: number }) => {
       console.log('Fetching Customers', limit);
-
       const customers = await CustomerService.getLatestCustomers(limit);
+      
       return {
         content: [{ type: 'text', text: JSON.stringify(customers, null, 2) }],
-        structuredContent: {customers},
       };
     }
   );
 
-    mcpServer.registerTool(
+  server.tool(
     "getCustomerById",
+    "Fetch customer by id. Retrieve customer from the json data based on id",
     {
-      title: "Fetch customer by id",
-      description: "Retrieve customer from the json data based on id",
-      inputSchema: {
-        id: z.string(),
-      },
-      outputSchema: {
-        customer: z.object({
-          _id: z.string(),
-          name: z.string(),
-          email: z.string(),
-          joinedAt: z.string().optional(),
-        }),
-      },
+      id: z.string(),
     },
-    async ({ id }) => {
+    async ({ id }: { id: string }) => {
       console.log("Fetching customer by id...", id);
-
       const customer = await CustomerService.getCustomerById(id);
 
       return {
         content: [{ type: "text", text: JSON.stringify(customer, null, 2) }],
-        structuredContent: { customer },
       };
     }
   );
