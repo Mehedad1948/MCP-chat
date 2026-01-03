@@ -26,10 +26,11 @@ class MCPClientService {
         if (this.initialised) return this
 
         const url = `${process.env.NEXT_PUBLIC_BASE_URL}/api/mcp`
-        console.log('🐞🐞🐞 MCP client calling MCP server');
+        console.log('🐞🐞🐞 MCP client calling MCP server' , url);
         
         const transport = new StreamableHTTPClientTransport(new URL(url))
-
+        console.log('✅✅✅ transport Created', transport );
+        
         await this.client.connect(transport)
         this.initialised = true
         return this
