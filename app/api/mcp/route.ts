@@ -31,20 +31,16 @@ function createTransport() {
 }
 
 async function handlePostAdapter(req: NextRequest, transport: StreamableHTTPServerTransport, parsedBody: any) {
-  console.log("[MCP Adapter] Starting Adapter...");
+  console.log("[MCP Adapter] Starting POST Adapter...");
 
   return new Promise<NextResponse>((resolve) => {
     let responseData = "";
     let statusCode = 200;
     const responseHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    let isResolved = false;
-
-    // Helper to ensure we only resolve once
-    const safeResolve = (res: NextResponse) => {
-      if (isResolved) return;
-      isResolved = true;
-      resolve(res);
-    };
+    
+    // 1. Prepare the body data for the SDK to read
+    const bodyString = JSON.stringify(parsedBody);
+    const bodyBuffer = Buffer.from(bodyString);
 
     const mockRes = {
       setHeader: (key: string, value: string) => { responseHeaders[key] = value; },
@@ -55,41 +51,38 @@ async function handlePostAdapter(req: NextRequest, transport: StreamableHTTPServ
       write: (chunk: any) => { responseData += chunk; return true; },
       end: (chunk: any) => {
         if (chunk) responseData += chunk;
-        console.log(`[MCP Adapter] Response ended. Status: ${statusCode}, Data Length: ${responseData.length}`);
+        console.log(`[MCP Adapter] Response ready. Status: ${statusCode}`);
         
-        // If SDK crashed (500) but sent no data, provide a fallback JSON so Next.js doesn't hang on empty response
-        if (statusCode === 500 && responseData.length === 0) {
-           console.error("[MCP Adapter] SDK sent 500 with empty body. Returning fallback error.");
-           safeResolve(NextResponse.json({ 
-             jsonrpc: "2.0", 
-             error: { code: -32603, message: "Internal SDK Error (Empty 500 response)" }, 
-             id: parsedBody?.id || null 
-           }, { status: 500 }));
-           return;
-        }
-
-        safeResolve(new NextResponse(responseData, { status: statusCode, headers: responseHeaders }));
+        resolve(new NextResponse(responseData, { 
+            status: statusCode, 
+            headers: responseHeaders 
+        }));
       },
     };
 
-    // Extract path from URL to avoid absolute URL confusion in Node SDKs
     const urlObj = new URL(req.url);
     const relativeUrl = urlObj.pathname + urlObj.search;
 
+    // 2. Mock Request that actually EMITS data
     const mockReq = {
       method: req.method,
-      url: relativeUrl, // Send relative URL (e.g. /api/mcp) instead of http://localhost...
-      headers: Object.fromEntries(req.headers.entries()),
-      body: parsedBody,
-      socket: {}, // Dummy socket to satisfy loose checks
+      url: relativeUrl,
+      // Merge headers, but enforce Content-Length so SDK knows how much to read
+      headers: {
+        ...Object.fromEntries(req.headers.entries()),
+        "content-type": "application/json",
+        "content-length": bodyBuffer.length.toString()
+      },
+      socket: {}, 
       
       on: (event: string, callback: any) => {
+        if (event === 'data') {
+          // Send the actual JSON string
+          setImmediate(() => callback(bodyBuffer));
+        }
         if (event === 'end') {
-          // IMPORTANT: Trigger asynchronously to avoid race conditions during listener attachment
-          setTimeout(() => {
-            console.log("[MCP Adapter] Triggering async 'end' event");
-            callback();
-          }, 0);
+          // End the stream after data is sent
+          setImmediate(() => callback());
         }
         return mockReq;
       },
@@ -97,19 +90,19 @@ async function handlePostAdapter(req: NextRequest, transport: StreamableHTTPServ
     };
 
     try {
-      // Execute
-      transport.handleRequest(mockReq as any, mockRes as any, parsedBody)
+      transport.handleRequest(mockReq as any, mockRes as any)
         .catch((err) => {
-            console.error("[MCP Adapter] Uncaught Transport Error:", err);
-            safeResolve(NextResponse.json({ error: "Transport Execution Error" }, { status: 500 }));
+            console.error("[MCP Adapter] Transport Error:", err);
+            resolve(NextResponse.json({ error: "Transport Error" }, { status: 500 }));
         });
     } catch (error) {
-      console.error("[MCP Adapter] Synchronous Error:", error);
-      safeResolve(NextResponse.json({ error: "Internal Adapter Error" }, { status: 500 }));
+      console.error("[MCP Adapter] Sync Error:", error);
+      resolve(NextResponse.json({ error: "Adapter Error" }, { status: 500 }));
     }
   });
 }
 
+// Keep GET Adapter same as before (it works fine usually)
 function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTransport) {
   const stream = new ReadableStream({
     start(controller) {
@@ -126,16 +119,18 @@ function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTrans
         setHeader: () => {},
         writeHead: () => {},
         write: (chunk: any) => {
-          controller.enqueue(new TextEncoder().encode(chunk));
-          return true;
+            try {
+                controller.enqueue(new TextEncoder().encode(chunk));
+            } catch(e) { /* Controller might be closed */ }
+            return true;
         },
         end: () => {
-          controller.close();
+             try { controller.close(); } catch(e) { /* Already closed */ }
         },
       };
 
       transport.handleRequest(mockReq as any, mockRes as any).catch((err) => {
-        controller.error(err);
+         try { controller.error(err); } catch(e) {}
       });
     },
   });
@@ -149,7 +144,7 @@ function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTrans
   });
 }
 
-// --- ROUTE HANDLERS ---
+// --- MAIN ROUTE ---
 
 export async function POST(req: NextRequest) {
   const sessionId = req.headers.get("mcp-session-id") || undefined;
@@ -159,41 +154,38 @@ export async function POST(req: NextRequest) {
     const text = await req.text();
     if (text) body = JSON.parse(text);
   } catch (e) {
-    console.error("[POST] Body Parse Error:", e);
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   let transport = getSessionTransport(sessionId);
 
   if (USE_SESSIONS) {
+    // If it's an 'initialize' request, we MUST create a transport regardless of session ID presence
     const isInitialize = body?.method === "initialize";
 
-    if (!transport && isInitialize) {
+    if (isInitialize || !transport) {
       transport = createTransport();
       await mcpServer.connect(transport);
-    }
-
-    if (!transport) {
-      return NextResponse.json(
-        { error: { message: "No valid session provided" }, id: null },
-        { status: 400 }
-      );
     }
   } else {
     transport = createTransport();
     await mcpServer.connect(transport);
   }
 
+  if (!transport) {
+      return NextResponse.json({ error: "Session not found" }, { status: 400 });
+  }
+
+  // Await the adapter result and return it
   return await handlePostAdapter(req, transport, body);
 }
 
 export async function GET(req: NextRequest) {
-  if (!USE_SESSIONS) return new NextResponse("GET not supported in stateless", { status: 400 });
-  
   const sessionId = req.headers.get("mcp-session-id") || undefined;
+  if (!sessionId) return new NextResponse("Session ID required", { status: 400 });
+  
   const transport = getSessionTransport(sessionId);
-
-  if (!transport) return new NextResponse("Invalid session ID", { status: 400 });
+  if (!transport) return new NextResponse("Invalid session", { status: 400 });
 
   return handleGetAdapter(req, transport);
 }
