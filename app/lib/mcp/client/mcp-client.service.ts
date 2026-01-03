@@ -25,7 +25,7 @@ class MCPClientService {
     async init(){
         if (this.initialised) return this
 
-        const url = `${process.env.NEXT_PUBLIC_BASE_URL}/api/mcp/transport/mcp`
+        const url = `${process.env.NEXT_PUBLIC_BASE_URL}/api/mcp/transport-test/mcp`
         console.log('🐞🐞🐞 MCP client calling MCP server' , url);
         
         const transport = new StreamableHTTPClientTransport(new URL(url))
