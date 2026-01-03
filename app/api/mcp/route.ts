@@ -3,7 +3,7 @@
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { createMcpServer } from '@/app/lib/mcpServer';
+import { createMcpServer } from '@/app/lib/mcp/server/mcpServer';
 
 // Initialize Server
 const mcpServer = createMcpServer();

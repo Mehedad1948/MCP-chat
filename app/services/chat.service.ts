@@ -1,56 +1,66 @@
-// app/actions.ts
 'use server';
 
-
+import { GEMINI } from '../lib/geminiProvider';
 import RagProvider from '../lib/rag';
-import GeminiProvider from '../lib/geminiProvider';
 
 export async function sendMessageToLLM(message: string) {
-  // 1. Retrieve Environment Variables
-  const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash'; // Default or from env
-
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not defined in environment variables');
-  }
-
   try {
-    const gemini = new GeminiProvider(
-      process.env.GEMINI_API_KEY,
-      process.env.GEMINI_MODEL
-    );
-
-    // const response = await gemini.generateResponse(message);
-
-    // Incorporate RAG to prepare the prompt
+    // 1. Initialize Gemini wrapper for Embeddings
+    
+    // 2. Perform RAG Logic (Embeddings & Vector Search) to build context
+    // We keep this logic here so we send a "smart" prompt to the API agent
     const rag = new RagProvider();
-    // const prompt = rag.prepareSimpleRagPrompt(message);
-
-    // For RAG with embeddings, we would first need to generate the query embedding
-    const queryEmbedding = await gemini.generateEmbeddings(message);
+    
+    // Generate embedding for the user's message
+    const queryEmbedding = await GEMINI.generateEmbeddings(message);
     const queryVector = queryEmbedding[0];
 
     // Fetch FAQ vectors from faqs.json
-    const faqData: {question: string, answer: string}[] = rag.fetchDocumentData("faqs.json");
-    const faqEmbeddings = await gemini.generateEmbeddings(
+    const faqData: { question: string; answer: string }[] =
+      rag.fetchDocumentData('faqs.json');
+      
+    const faqEmbeddings = await GEMINI.generateEmbeddings(
       faqData.map((item) => item.answer),
-      "RETRIEVAL_DOCUMENT"
+      'RETRIEVAL_DOCUMENT'
     );
-    
+
     const faqVectors = faqData.map((faq, index) => ({
       ...faq,
       vector: faqEmbeddings[index],
     }));
 
+    // 3. Create the enriched prompt (Original Message + RAG Context)
+    const enrichedPrompt = rag.prepareRagPrompt(message, queryVector, faqVectors);
 
-    const prompt = rag.prepareRagPrompt(message, queryVector, faqVectors);
+    // 4. Send to the API Route
+    // IMPORTANT: Server Actions require an absolute URL to fetch internal API routes.
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const apiUrl = `${baseUrl}/api/agent`;
 
-    const response = await gemini.generateResponse(prompt);
-    // console.log(`Generated response: ${response}`);
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: enrichedPrompt, // Send the RAG-prepared prompt
+        model: 'gemini'
+      }),
+      cache: 'no-store' // Ensure we don't cache the AI response
+    });
 
-    return response
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API call failed with status: ${response.status}`);
+    }
+
+    // 5. Return the result
+    const data = await response.json();
+    return data.reply;
+
   } catch (error) {
-    console.error("Error generating response from Gemini:", error);
-  return `Error generating response from Gemini ➡️:${JSON.stringify(error)}`
+    console.error('Error in sendMessageToLLM:', error);
+    // Return a graceful error message string to the UI
+    return `Error processing request: ${error instanceof Error ? error.message : JSON.stringify(error)}`;
   }
 }

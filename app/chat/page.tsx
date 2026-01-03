@@ -1,11 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// chat/page.tsx
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Message } from '@/interfaces/message';
-import { chatAction } from '../actions/chat.actions'; // Updated Import: Using Server Action
-import { MessageCircleDashed } from 'lucide-react';
+import { chatAction } from '@/app/actions/chat.actions'; 
+import { MessageCircleDashed, Send, Bot, User } from 'lucide-react'; // Added icons
+
+// Define the interface locally if not available in imports yet
+interface Message {
+  id: number;
+  sender: 'user' | 'bot';
+  message: string;
+  modelName?: string;
+}
 
 export default function ChatInterface() {
     // --- State Management ---
@@ -16,17 +22,27 @@ export default function ChatInterface() {
 
     // --- Refs ---
     const chatContainerRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     // --- Effects ---
+    // Auto-scroll to bottom when history or loading changes
     useEffect(() => {
         if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+            chatContainerRef.current.scrollTo({
+                top: chatContainerRef.current.scrollHeight,
+                behavior: 'smooth'
+            });
         }
-    }, [history]);
+    }, [history, loading]);
+
+    // Focus input on mount
+    useEffect(() => {
+        inputRef.current?.focus();
+    }, []);
 
     // --- Handlers ---
     const handleSendMessage = async (e?: React.FormEvent) => {
-        e?.preventDefault(); // Prevent form reload
+        e?.preventDefault(); 
 
         const userMessage = message.trim();
         if (!userMessage || loading) return;
@@ -37,34 +53,35 @@ export default function ChatInterface() {
             message: userMessage,
         };
 
-        // Optimistic update: Add user message immediately
+        // 1. Update UI immediately (Optimistic)
         setHistory((prev) => [...prev, newMessage]);
-        setMessage(''); // Clear input
+        setMessage(''); 
+        setError(null);
 
+        // 2. Trigger the API call
         await askLLM(newMessage);
     };
 
     const askLLM = async (msg: Message) => {
         try {
             setLoading(true);
-            setError(null);
-
-            // Updated Logic: Call the Server Action
-            // We pass 'gemini' as the default model, similar to your controller logic
+            
+            // Call the Server Action
             const response = await chatAction(msg.message, 'gemini');
 
             if (response.error) {
                 setError(response.error);
+                // Optional: Remove the user message if it failed, or show error inline
                 return;
             }
 
-            const botReply = response.reply || "No response received from AI.";
+            const botReply = response.reply || "No response received.";
 
             const newBotMessage: Message = {
-                id: Date.now(),
+                id: Date.now() + 1, // Ensure distinct ID
                 sender: 'bot',
                 message: botReply,
-                modelName: 'Gemini' 
+                modelName: 'Gemini + MCP' 
             };
 
             setHistory((prev) => [...prev, newBotMessage]);
@@ -73,113 +90,120 @@ export default function ChatInterface() {
             setError(err?.message || 'Something went wrong communicating with the server.');
         } finally {
             setLoading(false);
+            // Re-focus input after sending
+            setTimeout(() => inputRef.current?.focus(), 100);
         }
     };
 
     return (
-        <div className="bg-gray-900 text-white h-screen w-screen flex items-center justify-center sm:p-4 font-sans">
-            <div className="flex flex-col w-full max-w-2xl h-full sm:max-h-[90%] bg-gray-800 sm:rounded-3xl shadow-2xl overflow-hidden">
+        <div className="bg-gray-900 text-gray-100 h-screen w-screen flex items-center justify-center sm:p-4 font-sans">
+            <div className="flex flex-col w-full max-w-3xl h-full sm:max-h-[90vh] bg-gray-800 sm:rounded-3xl shadow-2xl overflow-hidden border border-gray-700">
 
                 {/* --- Header --- */}
-                <header className="flex items-center p-4 gap-4 border-b border-gray-700">
-                    <MessageCircleDashed />
+                <header className="flex items-center p-4 gap-4 border-b border-gray-700 bg-gray-800/50 backdrop-blur-md">
+                    <div className="p-2 bg-teal-600/20 rounded-xl">
+                        <MessageCircleDashed className="text-teal-400 w-6 h-6" />
+                    </div>
                     <div>
-                        <h1 className="text-xl md:text-2xl font-bold text-white">Technyks AI Chat</h1>
-                        <p className="text-sm md:text-base text-gray-400">Your AI assistant</p>
+                        <h1 className="text-lg md:text-xl font-bold text-white tracking-tight">Technyks Agent</h1>
+                        <p className="text-xs text-teal-400 font-medium flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-green-500 inline-block animate-pulse"></span>
+                            Online & Ready
+                        </p>
                     </div>
                 </header>
 
                 {/* --- Chat History --- */}
                 <main
                     ref={chatContainerRef}
-                    className="flex-grow p-4 overflow-y-auto scroll-smooth custom-scrollbar"
+                    className="flex-grow p-4 md:p-6 overflow-y-auto custom-scrollbar space-y-6"
                 >
-                    <div className="flex flex-col space-y-4">
+                    {history.length === 0 && !loading && (
+                        <div className="flex flex-col justify-center items-center h-full text-center space-y-4 opacity-60">
+                            <Bot size={48} className="text-gray-500" />
+                            <p className="text-gray-400 text-sm">
+                                Ask me anything about the documents.<br/>
+                                I am powered by RAG and MCP tools.
+                            </p>
+                        </div>
+                    )}
 
-                        {/* No history found */}
-                        {history.length === 0 && !loading && (
-                            <div className="flex justify-center items-center h-full">
-                                <p className="text-gray-500">Start the conversation by typing a message below.</p>
-                            </div>
-                        )}
+                    {history.map((item) => (
+                        <div
+                            key={item.id}
+                            className={`flex w-full ${item.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                        >
+                            <div className={`flex max-w-[85%] md:max-w-[75%] gap-3 ${item.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                                
+                                {/* Avatar */}
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                    item.sender === 'user' ? 'bg-teal-600' : 'bg-indigo-600'
+                                }`}>
+                                    {item.sender === 'user' ? <User size={14} /> : <Bot size={14} />}
+                                </div>
 
-                        {/* Chat Messages */}
-                        {history.map((item, index) => (
-                            <div
-                                key={item.id || index}
-                                className={`flex flex-col ${item.sender === 'user'
-                                    ? 'self-end items-end'
-                                    : 'self-start items-start'
-                                    }`}
-                            >
-                                <p className={`mb-1 text-xs ${item.sender === 'user'
-                                    ? 'text-teal-400 mr-3'
-                                    : 'text-gray-400 ml-3'
+                                {/* Bubble */}
+                                <div className={`flex flex-col ${item.sender === 'user' ? 'items-end' : 'items-start'}`}>
+                                    <span className="text-[10px] text-gray-400 mb-1 px-1">
+                                        {item.sender === 'user' ? 'You' : item.modelName}
+                                    </span>
+                                    <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
+                                        item.sender === 'user' 
+                                            ? 'bg-teal-600 text-white rounded-tr-sm' 
+                                            : 'bg-gray-700 text-gray-100 rounded-tl-sm border border-gray-600'
                                     }`}>
-                                    {item.sender === 'user' ? 'You' : (item.modelName || 'Jarvis Bot')}
-                                </p>
-
-                                <div
-                                    className={`max-w-xs md:max-w-md lg:max-w-[85%] px-4 py-3 rounded-2xl ${item.sender === 'user'
-                                        ? 'bg-teal-600'
-                                        : 'bg-gray-700'
-                                        }`}
-                                >
-                                    <p className={`text-sm ${item.sender === 'bot' ? 'whitespace-pre-wrap' : ''}`}>
-                                        {item.message}
-                                    </p>
-                                </div>
-                            </div>
-                        ))}
-
-                        {/* Bot Typing Indicator */}
-                        {loading && (
-                            <div className="flex justify-start">
-                                <div className="max-w-xs md:max-w-md lg:max-w-2xl animate-pulse">
-                                    <div className="flex items-center">
-                                        <span className="text-xs text-gray-400 ml-3">Bot is typing...</span>
-                                        <span className="w-2 h-2 bg-teal-400 rounded-full ml-2 animate-pulse delay-75"></span>
-                                        <span className="w-2 h-2 bg-teal-400 rounded-full ml-1 animate-pulse delay-150"></span>
-                                        <span className="w-2 h-2 bg-teal-400 rounded-full ml-1 animate-pulse delay-300"></span>
-                                    </div>
-                                    {/* Skeleton Text */}
-                                    <div className="mt-2 space-y-2 p-3 rounded-2xl bg-gray-700">
-                                        <div className="h-2 bg-gray-600 rounded w-3/4"></div>
-                                        <div className="h-2 bg-gray-600 rounded w-1/2"></div>
+                                        <p className="whitespace-pre-wrap">{item.message}</p>
                                     </div>
                                 </div>
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    ))}
+
+                    {/* Loading State */}
+                    {loading && (
+                        <div className="flex justify-start w-full">
+                            <div className="flex gap-3 max-w-[75%]">
+                                <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0">
+                                    <Bot size={14} />
+                                </div>
+                                <div className="bg-gray-700 rounded-2xl rounded-tl-sm px-4 py-3 border border-gray-600 flex items-center gap-2">
+                                    <span className="text-xs text-gray-400">Processing tools...</span>
+                                    <div className="flex gap-1">
+                                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
+                                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-100"></span>
+                                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-200"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </main>
 
                 {/* --- Input Form --- */}
-                <footer className="p-4 border-t border-gray-700">
-                    <form onSubmit={handleSendMessage} className="flex items-center space-x-2 md:space-x-4">
+                <footer className="p-4 border-t border-gray-700 bg-gray-800">
+                    <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
                         <input
+                            ref={inputRef}
                             type="text"
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
-                            className="flex-grow bg-gray-700 border border-gray-600 rounded-full py-2 px-4 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 text-white placeholder-gray-400"
+                            className="w-full bg-gray-900 border border-gray-700 rounded-full py-3 pl-5 pr-12 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all text-white placeholder-gray-500"
                             placeholder="Type your message..."
                             disabled={loading}
                         />
                         <button
                             type="submit"
-                            className="bg-teal-600 text-white rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-teal-600/50 disabled:cursor-not-allowed"
+                            className="absolute right-2 p-2 bg-teal-600 text-white rounded-full hover:bg-teal-500 disabled:opacity-50 disabled:hover:bg-teal-600 transition-colors shadow-lg"
                             disabled={loading || !message}
                         >
-                            {/* Send Icon SVG */}
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z" />
-                            </svg>
+                            <Send size={18} />
                         </button>
                     </form>
-
+                    
                     {error && (
-                        <p className="text-red-400 text-sm mt-2 text-center">
-                            {error}
-                        </p>
+                        <div className="mt-3 p-2 bg-red-900/30 border border-red-800 rounded-lg text-center">
+                            <p className="text-red-400 text-xs">{error}</p>
+                        </div>
                     )}
                 </footer>
             </div>
