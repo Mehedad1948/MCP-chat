@@ -1,52 +1,67 @@
-import { NextResponse } from 'next/server';
-import { GEMINI } from '@/app/lib/geminiProvider';
-import { MCPClient } from '@/app/lib/mcp/client/mcp-client.service';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Client } from '@modelcontextprotocol/sdk/client'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
-export async function POST(request: Request) {
-  try {
-    // Parse the JSON body from the request
-    const body = await request.json();
-    const { message, model } = body;
+class MCPClientService {
+    private static instance: MCPClientService
+    client: Client
+    private tools: any[] = []
+    private initialised = false;
 
-    // Validate input
-    if (!message) {
-      return NextResponse.json(
-        { error: 'Message is required' },
-        { status: 400 }
-      );
+    constructor(){
+        this.client = new Client({
+            name: 'node-mcp-client',
+            version: '1.0.0'
+        })
     }
 
-    const selectedModel = model || 'gemini';
-
-    if (selectedModel === 'gemini') {
-      // Initialize MCP Client
-      const mcp = await MCPClient.init();
-      
-      // Generate response
-      const response = await GEMINI.generateResponseWithTools(message, mcp.client);
-      
-      return NextResponse.json({ reply: response });
+    static getInstance(): MCPClientService {
+        if (!MCPClientService.instance) {
+            MCPClientService.instance = new MCPClientService()
+        }
+        return MCPClientService.instance
     }
 
-    if (selectedModel === 'gpt') {
-      // Model calling logic for GPT would go here
-      // For now, return a placeholder or implement logic
-      return NextResponse.json({ reply: 'GPT model not implemented yet' });
+    async init(){
+        if (this.initialised) return this
+
+        // FIX: Ensure we use 127.0.0.1 for local dev to avoid IPv6 issues
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://127.0.0.1:3000';
+        const url = `${baseUrl}/api/mcp`
+        
+        console.log(`Connecting MCP Client to: ${url}`); // Debug log
+
+        const transport = new StreamableHTTPClientTransport(new URL(url))
+
+        try {
+            await this.client.connect(transport)
+            this.initialised = true
+        } catch (error) {
+            console.error("Failed to connect MCP Client:", error);
+            throw error;
+        }
+        
+        return this
     }
 
-    // Fallback if model string is valid but not handled above
-    return NextResponse.json(
-      { error: 'Invalid model specified' },
-      { status: 400 }
-    );
+    async getTools(){
+        await this.init()
 
-  } catch (error) {
-    console.error('Error generating response:', error);
-    
-    // Return 500 error
-    return NextResponse.json(
-      { error: 'Failed to get a response from the AI.' },
-      { status: 500 }
-    );
-  }
+        if (this.tools.length === 0) {
+            const list = await this.client.listTools()
+            this.tools = list.tools
+        }
+        return this.tools
+    }
+
+   async callTool(name: string, args: Record<string, any>){
+        if (!this.initialised) await this.init()
+
+            return await this.client.callTool({
+                name,
+                arguments: args
+            })
+    }
 }
+
+export const MCPClient = MCPClientService.getInstance()
