@@ -44,8 +44,6 @@ class RagProvider {
 
     const context = ranked.map((item) => item.answer).join("\n");
 
-    console.log('🎮🎮 retrived Contenxt', ranked);
-
 
     const prompt = `
       Use the context below to answer. If the answer isn't there, say "It's not available in the documentation, but I will try to help you as best as I can." and try to help based on your general knowledge.
