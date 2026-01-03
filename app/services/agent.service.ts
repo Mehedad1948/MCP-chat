@@ -15,6 +15,8 @@ export async function generateAgentResponse(message: string, model: string = 'ge
     // Initialize MCP Client
     const mcp = await MCPClient.init();
     
+    console.log('🚀🚀🚀 mcp instance',mcp );
+    
     // Generate response using Gemini + MCP Tools
     const response = await GEMINI.generateResponseWithTools(message, mcp.client);
     
