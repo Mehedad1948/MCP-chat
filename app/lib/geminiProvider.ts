@@ -53,6 +53,9 @@ class GeminiService {
     mcpClient: Client
   ): Promise<string> {
     try {
+
+      console.log('🎄🎄🎄🎄 Calling model ');
+      
       const response = await this.genAI.models.generateContent({
         model: this.modelName,
         contents: [

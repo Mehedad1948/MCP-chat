@@ -128,6 +128,8 @@ function handleGetAdapter(req: NextRequest, transport: StreamableHTTPServerTrans
 export async function POST(req: NextRequest) {
   const sessionId = req.headers.get("mcp-session-id") || undefined;
   
+  console.log('🚀🚀🚀 sessionId in mcp post');
+  
   // 1. Parse Body
   let body: any = {};
   try { body = await req.json(); } catch (e) { /* empty */ }

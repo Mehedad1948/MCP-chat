@@ -33,7 +33,9 @@ export async function sendMessageToLLM(message: string) {
     const enrichedPrompt = rag.prepareRagPrompt(message, queryVector, faqVectors);
 
     // 4. DIRECT CALL (Replaces the fetch call)
-    // We call the logic function directly. No HTTP overhead, no ECONNREFUSED.
+   
+    console.log('🍎🍎 calling agent from UI');
+    
     const response = await generateAgentResponse(enrichedPrompt, 'gemini');
 
     return response;
