@@ -21,7 +21,7 @@ function chunkText(text: string): string[] {
 }
 
 export async function ingestFolder(folderPath: string) {
-  const Store = VectorStorePg;
+  const Store = VectorStore
 
   await Store?.init();
 

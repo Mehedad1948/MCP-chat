@@ -11,7 +11,7 @@ import { VectorStorePg } from './vectorStore/dbs/pgvectore.db';
 export class RagEngine {
   static async buildPrompt(query: string, topK: number = 4) {
     try {
-      const Store = VectorStorePg
+      const Store = VectorStore
       await Store.init();
 
       const [queryEmbedding] = await GEMINI.generateEmbeddings([query]);
