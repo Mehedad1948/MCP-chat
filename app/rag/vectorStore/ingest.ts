@@ -1,8 +1,8 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { GEMINI } from '../../lib/geminiProvider';
-import { VectorStorePg } from './dbs/pgvectore.db';
+import { VectorStore } from './vectore.store';
 
 const CHUNK_SIZE = Number(process.env.RAG_CHUNK_SIZE) || 800;
 const CHUNK_OVERLAP = Number(process.env.RAG_CHUNK_OVERLAP) || 100;

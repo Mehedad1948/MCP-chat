@@ -6,7 +6,7 @@ export interface RagChunk {
 }
 
 import { GEMINI } from '../lib/geminiProvider';
-import { VectorStorePg } from './vectorStore/dbs/pgvectore.db';
+import { VectorStore } from './vectorStore/vectore.store';
 
 export class RagEngine {
   static async buildPrompt(query: string, topK: number = 4) {
