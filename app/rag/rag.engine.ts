@@ -6,12 +6,12 @@ export interface RagChunk {
 }
 
 import { GEMINI } from '../lib/geminiProvider';
-import { VectorStore } from './vectorStore/vectore.store';
+import { VectorStorePg } from './vectorStore/dbs/pgvectore.db';
 
 export class RagEngine {
   static async buildPrompt(query: string, topK: number = 4) {
     try {
-      const Store = VectorStore.get();
+      const Store = VectorStorePg
       await Store.init();
 
       const [queryEmbedding] = await GEMINI.generateEmbeddings([query]);
