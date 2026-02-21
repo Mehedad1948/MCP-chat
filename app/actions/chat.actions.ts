@@ -10,12 +10,17 @@ export async function chatAction(message: string, model: string = "gemini") {
   try {
     if (model === "gemini") {
       // This calls your service, which calls the API route, which calls MCP
+      console.log('➡️➡️ User message:', message);
+
       const response = await sendMessageToLLM(message);
-      
+
       // If the service returned an error string in the catch block
       if (typeof response === 'string' && response.startsWith('Error')) {
-         return { error: response };
+        return { error: response };
       }
+
+      console.log('🐞🐞 LLm Response', response);
+      
 
       return { reply: response };
     }
