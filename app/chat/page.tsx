@@ -2,15 +2,15 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { chatAction } from '@/app/actions/chat.actions'; 
+import { chatAction } from '@/app/actions/chat.actions';
 import { MessageCircleDashed, Send, Bot, User } from 'lucide-react'; // Added icons
 
 // Define the interface locally if not available in imports yet
 interface Message {
-  id: number;
-  sender: 'user' | 'bot';
-  message: string;
-  modelName?: string;
+    id: number;
+    sender: 'user' | 'bot';
+    message: string;
+    modelName?: string;
 }
 
 export default function ChatInterface() {
@@ -42,7 +42,7 @@ export default function ChatInterface() {
 
     // --- Handlers ---
     const handleSendMessage = async (e?: React.FormEvent) => {
-        e?.preventDefault(); 
+        e?.preventDefault();
 
         const userMessage = message.trim();
         if (!userMessage || loading) return;
@@ -55,7 +55,7 @@ export default function ChatInterface() {
 
         // 1. Update UI immediately (Optimistic)
         setHistory((prev) => [...prev, newMessage]);
-        setMessage(''); 
+        setMessage('');
         setError(null);
 
         // 2. Trigger the API call
@@ -65,9 +65,13 @@ export default function ChatInterface() {
     const askLLM = async (msg: Message) => {
         try {
             setLoading(true);
-            
+
             // Call the Server Action
+            console.log('🍎🍎 chatAction Called');
+
             const response = await chatAction(msg.message, 'gemini');
+
+            console.log('✅✅ Response', response);
 
             if (response.error) {
                 setError(response.error);
@@ -81,7 +85,7 @@ export default function ChatInterface() {
                 id: Date.now() + 1, // Ensure distinct ID
                 sender: 'bot',
                 message: botReply,
-                modelName: 'Gemini + MCP' 
+                modelName: 'Gemini + MCP'
             };
 
             setHistory((prev) => [...prev, newBotMessage]);
@@ -122,7 +126,7 @@ export default function ChatInterface() {
                         <div className="flex flex-col justify-center items-center h-full text-center space-y-4 opacity-60">
                             <Bot size={48} className="text-gray-500" />
                             <p className="text-gray-400 text-sm">
-                                Ask me anything about the documents.<br/>
+                                Ask me anything about the documents.<br />
                                 I am powered by RAG and MCP tools.
                             </p>
                         </div>
@@ -134,11 +138,10 @@ export default function ChatInterface() {
                             className={`flex w-full ${item.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                         >
                             <div className={`flex max-w-[85%] md:max-w-[75%] gap-3 ${item.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                                
+
                                 {/* Avatar */}
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                    item.sender === 'user' ? 'bg-teal-600' : 'bg-indigo-600'
-                                }`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${item.sender === 'user' ? 'bg-teal-600' : 'bg-indigo-600'
+                                    }`}>
                                     {item.sender === 'user' ? <User size={14} /> : <Bot size={14} />}
                                 </div>
 
@@ -147,11 +150,10 @@ export default function ChatInterface() {
                                     <span className="text-[10px] text-gray-400 mb-1 px-1">
                                         {item.sender === 'user' ? 'You' : item.modelName}
                                     </span>
-                                    <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
-                                        item.sender === 'user' 
-                                            ? 'bg-teal-600 text-white rounded-tr-sm' 
-                                            : 'bg-gray-700 text-gray-100 rounded-tl-sm border border-gray-600'
-                                    }`}>
+                                    <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${item.sender === 'user'
+                                        ? 'bg-teal-600 text-white rounded-tr-sm'
+                                        : 'bg-gray-700 text-gray-100 rounded-tl-sm border border-gray-600'
+                                        }`}>
                                         <p className="whitespace-pre-wrap">{item.message}</p>
                                     </div>
                                 </div>
@@ -199,7 +201,7 @@ export default function ChatInterface() {
                             <Send size={18} />
                         </button>
                     </form>
-                    
+
                     {error && (
                         <div className="mt-3 p-2 bg-red-900/30 border border-red-800 rounded-lg text-center">
                             <p className="text-red-400 text-xs">{error}</p>
