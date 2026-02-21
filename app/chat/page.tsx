@@ -20,6 +20,9 @@ export default function ChatInterface() {
     const [error, setError] = useState<string | null>(null);
     const [message, setMessage] = useState('');
 
+    console.log('✅✅ Chat Initiated');
+
+
     // --- Refs ---
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -42,6 +45,9 @@ export default function ChatInterface() {
 
     // --- Handlers ---
     const handleSendMessage = async (e?: React.FormEvent) => {
+
+        console.log('🍎🍎 handleSendMessage');
+
         e?.preventDefault();
 
         const userMessage = message.trim();
