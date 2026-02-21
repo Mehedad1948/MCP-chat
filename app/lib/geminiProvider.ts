@@ -135,6 +135,8 @@ When answering, cite the tools and standards you used. Maintain a professional, 
     taskType = "RETRIEVAL_QUERY"
   ) {
     try {
+      console.log('🎮🎮🎮 generateEmbeddings ');
+      
       const response = await this.genAI.models.embedContent({
         model: "gemini-embedding-001",
         contents: data,
