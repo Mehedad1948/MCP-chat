@@ -1,5 +1,10 @@
 // app/api/transport/[transport]/route.ts
 
+// 🚨 CRITICAL FIXES FOR NEXT.JS SSE BUFFERING 🚨
+// Tell Next.js to never cache this route and allow immediate streaming
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+
 import { registerCustomerTools } from '@/app/lib/mcp/server/tools/customer.tool';
 import { registerOrderTools } from '@/app/lib/mcp/server/tools/order.tool';
 import { registerWeatherTools } from '@/app/lib/mcp/server/tools/weather.tool';
@@ -21,15 +26,8 @@ const handler = createMcpHandler(
   },
   {
     // Transport configuration
-    // CRITICAL: The basePath needs to match exactly where the client points to, 
-    // excluding the final transport method (like /sse or /messages) 
-    // if the library handles routing automatically.
-    
-    // If your file is app/api/transport/[transport]/route.ts, 
-    // Next.js serves this at /api/transport/*
-    
-    basePath: '/api/transport', // Updated to match folder structure
-    redisUrl: process.env.REDIS_URL, // Ensure this env var is set!
+    basePath: '/api/transport', 
+    redisUrl: process.env.REDIS_URL, 
     maxDuration: 60,
     verboseLogs: true,
   }
