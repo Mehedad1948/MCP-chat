@@ -38,6 +38,8 @@ export async function sendMessageToLLM(message: string) {
     
     const response = await generateAgentResponse(enrichedPrompt, 'gemini');
 
+    console.log('.🍎🍎🚀 generateAgentResponse', response);
+    
     return response;
 
   } catch (error) {

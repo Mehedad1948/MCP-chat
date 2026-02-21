@@ -144,6 +144,9 @@ When answering, cite the tools and standards you used. Maintain a professional, 
       });
 
       const embeddings = response.embeddings!.map((e) => e.values);
+
+      console.log('⭕⭕⭕ embeddings', embeddings);
+      
       return embeddings;
     } catch (error: any) {
       console.error("Error generating embeddings:", error);
