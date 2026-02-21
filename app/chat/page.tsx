@@ -115,7 +115,7 @@ export default function ChatInterface() {
                         <MessageCircleDashed className="text-teal-400 w-6 h-6" />
                     </div>
                     <div>
-                        <h1 className="text-lg md:text-xl font-bold text-white tracking-tight">Technyks Agent</h1>
+                        <h1 className="text-lg md:text-xl font-bold text-white tracking-tight">Technyks Agent V1</h1>
                         <p className="text-xs text-teal-400 font-medium flex items-center gap-1">
                             <span className="w-2 h-2 rounded-full bg-green-500 inline-block animate-pulse"></span>
                             Online & Ready
