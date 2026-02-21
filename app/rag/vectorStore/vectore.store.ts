@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Pool } from "pg";
-import pgvector from "pgvector/pg";
+import { registerType, toSql } from "pgvector/pg";
 
 // 1. NEON requires SSL. We must detect if we are in production/remote.
 const isProduction = process.env.NODE_ENV === 'production' || process.env.POSTGRES_URL?.includes('neon.tech');
@@ -13,7 +13,7 @@ const pool = new Pool({
 
 // Register pgvector types immediately on connection
 pool.on("connect", async (client) => {
-  await pgvector.registerTypes(client);
+  await registerType(client);
 });
 
 export class VectorStore {
@@ -96,7 +96,7 @@ export class VectorStore {
         chunkIndex,
         text,
         JSON.stringify(metadata),
-        pgvector.toSql(embedding),
+        await toSql(embedding),
       ]
     );
   }
@@ -112,7 +112,7 @@ export class VectorStore {
       ORDER BY embedding <=> $1
       LIMIT $2
       `,
-      [pgvector.toSql(embedding), topK]
+      [await toSql(embedding), topK]
     );
 
     return result.rows.map((row) => ({
