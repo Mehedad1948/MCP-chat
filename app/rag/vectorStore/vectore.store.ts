@@ -16,7 +16,7 @@ pool.on("connect", async (client) => {
   await registerType(client);
 });
 
-export class VectorStorePg {
+export class VectorStore {
   private static initialized = false;
   private static table = process.env.PGVECTOR_TABLE || "rag_vectors";
   
@@ -96,7 +96,7 @@ export class VectorStorePg {
         chunkIndex,
         text,
         JSON.stringify(metadata),
-        toSql(embedding),
+        await toSql(embedding),
       ]
     );
   }
@@ -112,7 +112,7 @@ export class VectorStorePg {
       ORDER BY embedding <=> $1
       LIMIT $2
       `,
-      [toSql(embedding), topK]
+      [await toSql(embedding), topK]
     );
 
     return result.rows.map((row) => ({
@@ -129,3 +129,4 @@ export class VectorStorePg {
     }));
   }
 }
+

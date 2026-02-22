@@ -7,12 +7,16 @@ import { MCPClient } from '@/app/lib/mcp/client/mcp-client.service';
  */
 export async function generateAgentResponse(message: string, model: string = 'gemini') {
   
+  console.log('👋 generateAgentResponse', message , {model});
+  
   if (!message) {
     throw new Error('Message is required');
   }
 
   if (model === 'gemini') {
     // Initialize MCP Client
+    console.log('🍎🍎🍎 Initialize MCP Client');
+    
     const mcp = await MCPClient.init();
     
     console.log('🚀🚀🚀 mcp instance',mcp );
